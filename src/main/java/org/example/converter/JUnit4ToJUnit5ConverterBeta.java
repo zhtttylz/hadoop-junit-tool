@@ -4,11 +4,13 @@ import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.expr.*;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.stmt.Statement;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
@@ -58,6 +60,9 @@ public class JUnit4ToJUnit5ConverterBeta {
     // 启用词法级保留打印，保留原始代码格式
     LexicalPreservingPrinter.setup(cu);
 
+    // 先处理那些 `extends Assert` 的类
+    processClassExtendsAssert(cu);
+
     // 1) 先对断言方法(如 assertEquals) 做参数迁移
     processAssertArguments(cu);
 
@@ -75,6 +80,28 @@ public class JUnit4ToJUnit5ConverterBeta {
 
     // 最终写回文件
     Files.writeString(path, LexicalPreservingPrinter.print(cu));
+  }
+
+  /**
+   * 新增功能：
+   * 识别 `extends Assert` 并将其改为 `extends Assertions`。
+   * 同时如果原来有 import org.junit.Assert，就移除；并添加/保留 import org.junit.jupiter.api.Assertions。
+   */
+  private void processClassExtendsAssert(CompilationUnit cu) {
+
+    // 使用 ModifierVisitor 遍历所有类/接口声明
+    cu.accept(new ModifierVisitor<Void>() {
+      @Override
+      public com.github.javaparser.ast.visitor.Visitable visit(ClassOrInterfaceDeclaration cid, Void arg) {
+        for (ClassOrInterfaceType et : cid.getExtendedTypes()) {
+          if ("Assert".equals(et.getNameAsString())) {
+            // 将 extends Assert 改为 extends Assertions
+            et.setName("Assertions");
+          }
+        }
+        return super.visit(cid, arg);
+      }
+    }, null);
   }
 
   /**
