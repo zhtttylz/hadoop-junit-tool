@@ -26,5 +26,7 @@ grep -rlE "org.junit.[A-Z]" "$TARGET_DIR" --include '*.java' | while IFS= read -
     -e 's/org.junit.Assert/org.junit.jupiter.api.Assertions/' \
     -e 's/junit.framework.TestCase/org.junit.jupiter.api.Assertions/' \
     -e 's/Assert\./Assertions./' \
+    -e 's/org.junit\.\*/org.junit.jupiter.api.\*/g' \
+    -e 's/@Ignore$/@Disabled/' \
     "$FILE"
 done

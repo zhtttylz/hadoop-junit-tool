@@ -11,12 +11,10 @@ public class StartCoverterMain {
 
   static String scriptPath = "/Users/didi/IdeaProjects/hadoop-junit-tool/shell/JUnit4ToJUnit5.sh";
 
-  //static String fileName = "/Users/didi/IdeaProjects/hadoop/hadoop-hdfs-project/hadoop-hdfs-rbf/src/test/java/org/apache/hadoop/hdfs/server/federation/router/TestRouterAllResolver.java";
+  static String converterDir = "/Users/didi/IdeaProjects/hadoop/hadoop-hdfs-project/hadoop-hdfs-rbf/src/test/java/org/apache/hadoop/hdfs/server/federation/router/TestRouterAdminCLI.java";
 
   public static void main(String[] args) throws IOException {
-    String targetDir =
-        "/Users/didi/IdeaProjects/hadoop/hadoop-hdfs-project/hadoop-hdfs-rbf/src/test/java";
-    List<String> files = ModifyFileCmd.getModifyFile(scriptPath, targetDir);
+    List<String> files = ModifyFileCmd.getModifyFile(scriptPath, converterDir);
     JUnit4ToJUnit5Converter converter = new JUnit4ToJUnit5Converter();
 
     for (String file : files) {

@@ -20,6 +20,7 @@ import org.example.util.JUnitMigrationUtils;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -78,12 +79,18 @@ public class JUnit4ToJUnit5ConverterBeta {
     addTimeoutImportIfNeeded(cu, needTimeoutImport.get());
     addAssertionsImportIfNeeded(cu, needAssertionsImport.get());
 
+    // 5) 处理 "import static org.hamcrest.MatcherAssertions.assertThat"
+    //    以及将 assertThat(...) 转为 AssertJ 风格。
+    transformHamcrestAssertToAssertJ(cu);
+
+    // 6) 处理 "org.assertj.core.api.Assertions" 和 “org.junit.jupiter.api.Assertions” 重名问题
+    processRedundantAssertionsImport(cu);
+
     // 最终写回文件
     Files.writeString(path, LexicalPreservingPrinter.print(cu));
   }
 
   /**
-   * 新增功能：
    * 识别 `extends Assert` 并将其改为 `extends Assertions`。
    * 同时如果原来有 import org.junit.Assert，就移除；并添加/保留 import org.junit.jupiter.api.Assertions。
    */
@@ -272,6 +279,7 @@ public class JUnit4ToJUnit5ConverterBeta {
     }, null);
   }
 
+
   /**
    * 4) 如果需要 @Timeout，则插入相关 import
    */
@@ -301,6 +309,79 @@ public class JUnit4ToJUnit5ConverterBeta {
   }
 
   /**
+   * 识别并替换 `import static org.hamcrest.MatcherAssertions.assertThat;`
+   * 为 `import static org.assertj.core.api.Assertions.assertThat;`
+   * 同时将类似 `assertThat(obj, is(value))` → `assertThat(obj).isEqualTo(value)`
+   * 也可根据需要扩展更多的匹配器映射。
+   */
+  private void transformHamcrestAssertToAssertJ(CompilationUnit cu) {
+    // 1) 替换导入
+    for (ImportDeclaration id : cu.getImports()) {
+      // 如果是静态导入，并且导入路径是 org.hamcrest.MatcherAssertions.assertThat
+      if (id.isStatic() &&
+          "org.hamcrest.MatcherAssertions.assertThat".equals(id.getNameAsString())) {
+        // 改为 org.assertj.core.api.Assertions.assertThat
+        id.setName("org.assertj.core.api.Assertions.assertThat");
+      }
+    }
+
+    // 2) 将 Hamcrest 的调用转为 AssertJ
+    // 先定义一个简单映射：Hamcrest matcher -> AssertJ 对应方法
+    Map<String, String> matcherMap = Map.of(
+        "is", "isEqualTo",
+        "equalTo", "isEqualTo",
+        "not", "isNotEqualTo",
+        "containsString", "contains"
+        // 如果有更多需要映射，可在此继续添加
+    );
+
+    cu.accept(new ModifierVisitor<Void>() {
+      @Override
+      public Visitable visit(MethodCallExpr mce, Void arg) {
+        // 寻找 assertThat(...) 方法
+        if ("assertThat".equals(mce.getNameAsString())) {
+          NodeList<Expression> args = mce.getArguments();
+          // 我们只处理类似 assertThat( actual, matcher(...) ) 两个参数的情况
+          if (args.size() == 2) {
+            Expression actualExpr = args.get(0);
+            Expression matcherExpr = args.get(1);
+
+            // 判断第二个参数是否是某个方法调用，如 is(...)、equalTo(...) 等
+            if (matcherExpr.isMethodCallExpr()) {
+              MethodCallExpr matcherCall = matcherExpr.asMethodCallExpr();
+              String matcherName = matcherCall.getNameAsString();
+
+              // 如果在我们定义的映射表里
+              if (matcherMap.containsKey(matcherName)) {
+                // 取出 AssertJ 对应的方法
+                String assertJMethod = matcherMap.get(matcherName);
+
+                // 一般 matcher(...) 有一个参数，如 is(value) / equalTo(value)
+                // 也可能是 not(value) 等
+                if (!matcherCall.getArguments().isEmpty()) {
+                  Expression expectedExpr = matcherCall.getArgument(0);
+
+                  // 修改原始 assertThat(...) 调用为单参数，即 assertThat(actualExpr)
+                  // 并将返回值再拼接一个链式调用：.isEqualTo(...) 或 .isNotEqualTo(...)
+                  // 最终成为 assertThat(actualExpr).isEqualTo(expectedExpr)
+                  mce.setArguments(new NodeList<>(actualExpr)); // 只保留实际值
+                  MethodCallExpr newChainedCall = new MethodCallExpr(mce, assertJMethod);
+                  newChainedCall.addArgument(expectedExpr);
+
+                  // 注意：此处 return 的 Visitable 会替换当前节点
+                  // 这样可避免对 mce 本身做深层次的改动或报错
+                  return newChainedCall;
+                }
+              }
+            }
+          }
+        }
+        return super.visit(mce, arg);
+      }
+    }, null);
+  }
+
+  /**
    * 5) 如果需要 Assertions（因 assertThrows）则插入相关 import
    */
   private void addAssertionsImportIfNeeded(CompilationUnit cu, boolean needAssertionsImport) {
@@ -315,8 +396,48 @@ public class JUnit4ToJUnit5ConverterBeta {
     }
   }
 
+  private void processRedundantAssertionsImport(CompilationUnit cu) {
+    NodeList<ImportDeclaration> importList = cu.getImports();
+    boolean hasAssertJAssertions = false;
+    boolean hasJUnitAssertions = false;
+
+    // 检查是否有 org.assertj.core.api.Assertions 和 org.junit.jupiter.api.Assertions 导入
+    for (ImportDeclaration id : importList) {
+      String importName = id.getNameAsString();
+      if ("org.assertj.core.api.Assertions".equals(importName)) {
+        hasAssertJAssertions = true;
+      } else if ("org.junit.jupiter.api.Assertions".equals(importName)) {
+        hasJUnitAssertions = true;
+      }
+    }
+
+    // 如果同时存在两个导入，删除 JUnit 的 Assertions 导入
+    if (hasAssertJAssertions && hasJUnitAssertions) {
+      importList.removeIf(id -> "org.assertj.core.api.Assertions".equals(id.getNameAsString()));
+
+      // 替换代码中的 Assertions.assertThat 为 assertThat
+      cu.accept(new ModifierVisitor<Void>() {
+        @Override
+        public Visitable visit(MethodCallExpr mce, Void arg) {
+          if ("assertThat".equals(mce.getNameAsString()) &&
+              mce.getScope().isPresent() && mce.getScope().get() instanceof NameExpr) {
+            NameExpr scope = mce.getScope().get().asNameExpr();
+            if ("Assertions".equals(scope.getNameAsString())) {
+              mce.removeScope();
+            }
+          }
+          return super.visit(mce, arg);
+        }
+      }, null);
+
+      // 添加静态导入语句
+      importList.add(new ImportDeclaration("org.assertj.core.api.Assertions.assertThat",
+          true, false));
+    }
+  }
+
   public static void main(String[] args) throws IOException {
-    JUnit4ToJUnit5Converter converter = new JUnit4ToJUnit5Converter();
+    JUnit4ToJUnit5ConverterBeta converter = new JUnit4ToJUnit5ConverterBeta();
     converter.converter(Path.of(fileName));
   }
 }
