@@ -8,6 +8,9 @@ import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.resolution.types.ResolvedType;
 
+import java.util.Arrays;
+import java.util.List;
+
 /**
  * @author zhtttylz
  * @date 2025/1/16 16:49
@@ -38,6 +41,10 @@ public class JUnitMigrationUtils {
       if ("toString".equals(methodCallExpr.getNameAsString())) {
         return true;
       }
+      if (methodCallExpr.getNameAsString().contains("string") ||
+          methodCallExpr.getNameAsString().contains("String")) {
+        return true;
+      }
       // b) 如果方法名是 format，而且 scope 是 String.format(...)，也可以认定为返回String
       //    这里注意：methodCallExpr.getScope() 是 Optional<Expression>
       if ("format".equals(methodCallExpr.getNameAsString())
@@ -51,12 +58,14 @@ public class JUnitMigrationUtils {
       }
     }
 
-    if (expr instanceof NameExpr) {
-      NameExpr nameExpr = (NameExpr) expr;
-      // 假设我们知道，这个变量名就叫 msg，或者叫什么固定名称，那可以直接返回true
-      if ("msg".equals(nameExpr.getNameAsString())) {
+    if (expr instanceof NameExpr nameExpr) {
+      String name = nameExpr.getNameAsString();
+      if ("msg".equals(name)) {
         return true;
       }
+      // 将需要匹配的关键字放入列表
+      List<String> keywords = Arrays.asList("Message", "message", "Out", "out");
+      return keywords.stream().anyMatch(name::contains);
     }
 
     // 4) 最后，尝试走 symbol solver，看它能不能告诉我们是 String
