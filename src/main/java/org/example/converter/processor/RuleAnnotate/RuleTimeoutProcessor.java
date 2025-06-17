@@ -47,29 +47,20 @@ public class RuleTimeoutProcessor {
               // 移除 JUnit4 的 Timeout rule 字段
               field.remove();
 
-              // 找到包含该字段的类，然后为该类中每个测试方法添加 @Timeout 注解
+              // 找到包含该字段的类，然后在类上添加 @Timeout 注解
               Optional<ClassOrInterfaceDeclaration> parentClassOpt =
                   field.findAncestor(ClassOrInterfaceDeclaration.class);
               if (parentClassOpt.isPresent()) {
                 ClassOrInterfaceDeclaration parentClass = parentClassOpt.get();
-                // 遍历该类中的所有方法
-                parentClass.findAll(MethodDeclaration.class).forEach(method -> {
-                  // 假定带有 @Test 注解的方法为测试方法
-                  boolean isTestMethod = method.getAnnotations().stream()
-                      .anyMatch(a -> a.getNameAsString().equals("Test"));
-                  if (isTestMethod) {
-                    // 如果方法上还没有 @Timeout 注解，则添加
-                    boolean hasTimeoutAnnotation = method.getAnnotations().stream()
-                        .anyMatch(a -> a.getNameAsString().equals("Timeout"));
-                    if (!hasTimeoutAnnotation) {
-                      AnnotationExpr timeoutAnnotation = new SingleMemberAnnotationExpr(
-                          new Name("Timeout"),
-                          new IntegerLiteralExpr(String.valueOf(timeoutSeconds))
-                      );
-                      method.addAnnotation(timeoutAnnotation);
-                    }
-                  }
-                });
+                boolean hasTimeoutAnnotation = parentClass.getAnnotations().stream()
+                    .anyMatch(a -> a.getNameAsString().equals("Timeout"));
+                if (!hasTimeoutAnnotation) {
+                  AnnotationExpr timeoutAnnotation = new SingleMemberAnnotationExpr(
+                      new Name("Timeout"),
+                      new IntegerLiteralExpr(String.valueOf(timeoutSeconds))
+                  );
+                  parentClass.addAnnotation(timeoutAnnotation);
+                }
               }
 
               // 修改导入：移除 JUnit4 的 Timeout 导入，添加 JUnit5 的 Timeout 导入（如果尚未添加）
