@@ -26,12 +26,13 @@ public class RuleTimeoutProcessor {
   public static void processTimeoutRule(CompilationUnit cu) {
     // 遍历所有字段声明
     cu.findAll(FieldDeclaration.class).forEach(field -> {
-      // 判断该字段是否有 @Rule 注解且类型为 Timeout
+      // 判断该字段是否有 @Rule/@ClassRule 注解且类型为 Timeout
       boolean hasRuleAnnotation = field.getAnnotations().stream()
-          .anyMatch(a -> a.getNameAsString().equals("Rule"));
+          .anyMatch(a -> a.getNameAsString().equals("Rule")
+              || a.getNameAsString().equals("ClassRule"));
 
       boolean isTimeoutType = field.getElementType().asString().equals("Timeout");
-      if (hasRuleAnnotation && isTimeoutType) {
+      if (isTimeoutType && (hasRuleAnnotation || field.getAnnotations().isEmpty())) {
         // 获取字段中定义的变量（通常只有一个）
         VariableDeclarator var = field.getVariable(0);
         Optional<Expression> initializerOpt = var.getInitializer();
@@ -47,29 +48,20 @@ public class RuleTimeoutProcessor {
               // 移除 JUnit4 的 Timeout rule 字段
               field.remove();
 
-              // 找到包含该字段的类，然后为该类中每个测试方法添加 @Timeout 注解
+              // 找到包含该字段的类，然后在类上添加 @Timeout 注解
               Optional<ClassOrInterfaceDeclaration> parentClassOpt =
                   field.findAncestor(ClassOrInterfaceDeclaration.class);
               if (parentClassOpt.isPresent()) {
                 ClassOrInterfaceDeclaration parentClass = parentClassOpt.get();
-                // 遍历该类中的所有方法
-                parentClass.findAll(MethodDeclaration.class).forEach(method -> {
-                  // 假定带有 @Test 注解的方法为测试方法
-                  boolean isTestMethod = method.getAnnotations().stream()
-                      .anyMatch(a -> a.getNameAsString().equals("Test"));
-                  if (isTestMethod) {
-                    // 如果方法上还没有 @Timeout 注解，则添加
-                    boolean hasTimeoutAnnotation = method.getAnnotations().stream()
-                        .anyMatch(a -> a.getNameAsString().equals("Timeout"));
-                    if (!hasTimeoutAnnotation) {
-                      AnnotationExpr timeoutAnnotation = new SingleMemberAnnotationExpr(
-                          new Name("Timeout"),
-                          new IntegerLiteralExpr(String.valueOf(timeoutSeconds))
-                      );
-                      method.addAnnotation(timeoutAnnotation);
-                    }
-                  }
-                });
+                boolean hasTimeoutAnnotation = parentClass.getAnnotations().stream()
+                    .anyMatch(a -> a.getNameAsString().equals("Timeout"));
+                if (!hasTimeoutAnnotation) {
+                  AnnotationExpr timeoutAnnotation = new SingleMemberAnnotationExpr(
+                      new Name("Timeout"),
+                      new IntegerLiteralExpr(String.valueOf(timeoutSeconds))
+                  );
+                  parentClass.addAnnotation(timeoutAnnotation);
+                }
               }
 
               // 修改导入：移除 JUnit4 的 Timeout 导入，添加 JUnit5 的 Timeout 导入（如果尚未添加）
