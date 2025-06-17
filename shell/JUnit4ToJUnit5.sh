@@ -13,7 +13,9 @@ TARGET_DIR="$1"
 grep -rlE "org.junit.[A-Z]" "$TARGET_DIR" --include '*.java' | while IFS= read -r FILE; do
     # 在 sed 替换前先输出 FILE
   echo "$FILE"
-  sed -i '' \
+  # Use portable in-place editing. The .bak extension works on both
+  # GNU sed (Linux) and BSD sed (macOS).
+  sed -i.bak \
     -e 's/org.junit.After;/org.junit.jupiter.api.AfterEach;/' \
     -e 's/@After$/@AfterEach/' \
     -e 's/org.junit.AfterClass;/org.junit.jupiter.api.AfterAll;/' \
@@ -29,4 +31,5 @@ grep -rlE "org.junit.[A-Z]" "$TARGET_DIR" --include '*.java' | while IFS= read -
     -e 's/org.junit\.\*/org.junit.jupiter.api.\*/g' \
     -e 's/@Ignore$/@Disabled/' \
     "$FILE"
+  rm -f "${FILE}.bak"
 done
