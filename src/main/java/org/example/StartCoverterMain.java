@@ -11,7 +11,7 @@ public class StartCoverterMain {
 
   static String scriptPath = "/Users/didi/IdeaProjects/hadoop-junit-tool/shell/JUnit4ToJUnit5.sh";
 
-  static String converterDir = "/Users/didi/IdeaProjects/hadoop/hadoop-hdfs-project/hadoop-hdfs-rbf/src/test/java/org/apache/hadoop/hdfs/server/federation/router/TestRouterAdminCLI.java";
+  static String converterDir = "/Users/didi/IdeaProjects/hadoop/hadoop-hdfs-project/hadoop-hdfs/src/test/java/org/apache/hadoop/hdfs/DFSTestUtil.java";
 
   public static void main(String[] args) throws IOException {
     List<String> files = ModifyFileCmd.getModifyFile(scriptPath, converterDir);

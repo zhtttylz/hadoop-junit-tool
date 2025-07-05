@@ -4,6 +4,7 @@ import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.printer.lexicalpreservation.LexicalPreservingPrinter;
 import org.example.converter.processor.*;
+import org.example.converter.processor.AssertMethodCallFormatter;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -76,7 +77,9 @@ public class JUnit4ToJUnit5Converter {
     //RuleAnnotateProcessor.processJUnit4Rules(cu);
 
     // 最终写回文件
-    Files.writeString(path, LexicalPreservingPrinter.print(cu));
+    String result = LexicalPreservingPrinter.print(cu);
+    result = AssertMethodCallFormatter.format(result);
+    Files.writeString(path, result);
   }
 
   public static void main(String[] args) throws IOException {
