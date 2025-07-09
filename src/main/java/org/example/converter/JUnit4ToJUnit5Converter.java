@@ -4,6 +4,8 @@ import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.printer.lexicalpreservation.LexicalPreservingPrinter;
 import org.example.converter.processor.*;
+import org.example.converter.processor.AssertMethodCallFormatter;
+import org.example.util.GitDiffCodeFormatter;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -15,13 +17,16 @@ public class JUnit4ToJUnit5Converter {
 
   public static String fileName = "/Users/didi/IdeaProjects/hadoop/hadoop-hdfs-project/hadoop-hdfs-rbf/src/test/java/org/apache/hadoop/hdfs/server/federation/router/TestRouterAdminCLI.java";
 
+  final Path repoPath;
+
   // 需要交换两个参数
   final Set<String> swapTwoArgsMethods;
 
   // 需要交换三个参数
   final Set<String> shiftThreeArgsMethods;
 
-  public JUnit4ToJUnit5Converter() {
+  public JUnit4ToJUnit5Converter(Path repoPath) {
+    this.repoPath = repoPath;
     shiftThreeArgsMethods = Set.of(
         "assertEquals",
         "assertNotEquals",
@@ -76,11 +81,18 @@ public class JUnit4ToJUnit5Converter {
     //RuleAnnotateProcessor.processJUnit4Rules(cu);
 
     // 最终写回文件
-    Files.writeString(path, LexicalPreservingPrinter.print(cu));
+    String result = LexicalPreservingPrinter.print(cu);
+    result = AssertMethodCallFormatter.format(result);
+    Files.writeString(path, result);
+    try {
+      GitDiffCodeFormatter.formatChangedLines(repoPath, path);
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
   }
 
   public static void main(String[] args) throws IOException {
-    JUnit4ToJUnit5Converter converter = new JUnit4ToJUnit5Converter();
+    JUnit4ToJUnit5Converter converter = new JUnit4ToJUnit5Converter(Path.of("."));
     converter.converter(Path.of(fileName));
   }
 }
