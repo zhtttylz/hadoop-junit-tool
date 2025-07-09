@@ -13,9 +13,11 @@ public class StartCoverterMain {
 
   static String converterDir = "/Users/didi/IdeaProjects/hadoop/hadoop-hdfs-project/hadoop-hdfs/src/test/java/org/apache/hadoop/hdfs/DFSTestUtil.java";
 
+  static String repoRoot = "/Users/didi/IdeaProjects/hadoop";
+
   public static void main(String[] args) throws IOException {
     List<String> files = ModifyFileCmd.getModifyFile(scriptPath, converterDir);
-    JUnit4ToJUnit5Converter converter = new JUnit4ToJUnit5Converter();
+    JUnit4ToJUnit5Converter converter = new JUnit4ToJUnit5Converter(Path.of(repoRoot));
 
     for (String file : files) {
       System.out.println(file);
